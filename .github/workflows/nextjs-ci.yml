@@ -17,7 +17,7 @@ on:
         description: 'Maximum image size in KB'
         required: false
         type: number
-        default: 200
+        default: 500
       skip-typecheck:
         description: 'Skip TypeScript type checking'
         required: false
