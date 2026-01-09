@@ -1,0 +1,218 @@
+name: Vanilla JS CI Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '20'
+      file-size-limit:
+        description: 'Maximum file size in lines'
+        required: false
+        type: number
+        default: 850
+      image-size-limit:
+        description: 'Maximum image size in KB'
+        required: false
+        type: number
+        default: 200
+      working-directory:
+        description: 'Working directory for the project'
+        required: false
+        type: string
+        default: '.'
+
+jobs:
+  lint:
+    name: ESLint Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run lint
+
+  file-size:
+    name: File Size Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check JavaScript file sizes
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Checking JS file sizes (max ${{ inputs.file-size-limit }} lines)..."
+
+          errors=0
+
+          while IFS= read -r file; do
+            lines=$(wc -l < "$file")
+            if [ "$lines" -gt "${{ inputs.file-size-limit }}" ]; then
+              echo "[FAIL] $file: $lines lines (exceeds limit)"
+              errors=$((errors + 1))
+            fi
+          done < <(find . -name "*.js" -type f ! -path "./node_modules/*" ! -path "./dist/*")
+
+          if [ "$errors" -gt 0 ]; then
+            echo ""
+            echo "Found $errors files exceeding line limit"
+            exit 1
+          else
+            echo "All JS files within size limits"
+          fi
+
+      - name: Check CSS file sizes
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Checking CSS file sizes (max ${{ inputs.file-size-limit }} lines)..."
+
+          errors=0
+
+          while IFS= read -r file; do
+            lines=$(wc -l < "$file")
+            if [ "$lines" -gt "${{ inputs.file-size-limit }}" ]; then
+              echo "[FAIL] $file: $lines lines (exceeds limit)"
+              errors=$((errors + 1))
+            fi
+          done < <(find . -name "*.css" -type f ! -path "./node_modules/*" ! -path "./dist/*")
+
+          if [ "$errors" -gt 0 ]; then
+            echo ""
+            echo "Found $errors CSS files exceeding line limit"
+            exit 1
+          else
+            echo "All CSS files within size limits"
+          fi
+
+  image-optimization:
+    name: Image Optimization Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check image sizes
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Checking image sizes..."
+
+          limit_bytes=$(( ${{ inputs.image-size-limit }} * 1024 ))
+          errors=0
+          warnings=0
+
+          while IFS= read -r file; do
+            size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+            size_kb=$((size / 1024))
+
+            if [ "$size" -gt "$limit_bytes" ]; then
+              echo "[FAIL] $file: ${size_kb}KB (exceeds ${{ inputs.image-size-limit }}KB limit)"
+              errors=$((errors + 1))
+            elif [ "$size_kb" -gt 100 ]; then
+              echo "[WARN] $file: ${size_kb}KB (consider optimizing)"
+              warnings=$((warnings + 1))
+            fi
+          done < <(find . -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" -o -name "*.webp" -o -name "*.svg" \) ! -path "./node_modules/*")
+
+          echo ""
+          if [ "$errors" -gt 0 ]; then
+            echo "Found $errors images exceeding size limit"
+            exit 1
+          else
+            echo "All images within size limits"
+            [ "$warnings" -gt 0 ] && echo "$warnings images could be optimized further"
+          fi
+
+  html-validation:
+    name: HTML Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate HTML files
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Validating HTML files..."
+
+          errors=0
+
+          while IFS= read -r file; do
+            if ! grep -q "<!DOCTYPE html>" "$file" 2>/dev/null; then
+              if ! grep -qi "<!doctype html>" "$file" 2>/dev/null; then
+                echo "[WARN] $file: Missing DOCTYPE declaration"
+              fi
+            fi
+
+            if ! grep -q "<html" "$file" 2>/dev/null; then
+              echo "[FAIL] $file: Missing <html> tag"
+              errors=$((errors + 1))
+            fi
+          done < <(find . -name "*.html" -type f ! -path "./node_modules/*" ! -path "./layout/*")
+
+          if [ "$errors" -gt 0 ]; then
+            echo "HTML validation failed"
+            exit 1
+          else
+            echo "HTML validation passed"
+          fi
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan for security issues
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Scanning for security issues..."
+          warnings=0
+
+          # Check for hardcoded API keys (but allow environment lookups)
+          if grep -rn "apiKey\s*[=:]\s*['\"][a-zA-Z0-9]" --include="*.js" . 2>/dev/null | grep -v "node_modules" | grep -v "process.env" | grep -v "config.js"; then
+            echo "[WARN] Potential hardcoded API key detected"
+            warnings=$((warnings + 1))
+          fi
+
+          # Check for eval usage
+          if grep -rn "eval(" --include="*.js" . 2>/dev/null | grep -v "node_modules"; then
+            echo "[WARN] eval() usage detected - potential security risk"
+            warnings=$((warnings + 1))
+          fi
+
+          # Check for document.write
+          if grep -rn "document.write(" --include="*.js" . 2>/dev/null | grep -v "node_modules"; then
+            echo "[WARN] document.write() usage detected"
+            warnings=$((warnings + 1))
+          fi
+
+          echo ""
+          if [ "$warnings" -gt 0 ]; then
+            echo "Found $warnings potential security concerns - please review"
+          else
+            echo "No obvious security issues found"
+          fi
+
+          echo "Security scan completed"

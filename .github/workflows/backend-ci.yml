@@ -1,0 +1,228 @@
+name: Backend CI Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '22'
+      file-size-limit:
+        description: 'Maximum file size in lines'
+        required: false
+        type: number
+        default: 850
+      coverage-threshold-lines:
+        description: 'Minimum line coverage percentage'
+        required: false
+        type: number
+        default: 80
+      coverage-threshold-functions:
+        description: 'Minimum function coverage percentage'
+        required: false
+        type: number
+        default: 75
+      coverage-threshold-branches:
+        description: 'Minimum branch coverage percentage'
+        required: false
+        type: number
+        default: 70
+      working-directory:
+        description: 'Working directory for the project'
+        required: false
+        type: string
+        default: '.'
+
+jobs:
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ${{ inputs.working-directory }}
+        run: npx eslint . --max-warnings 0
+
+  file-size:
+    name: File Size Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check file sizes
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Checking file sizes (max ${{ inputs.file-size-limit }} lines)..."
+
+          errors=0
+
+          while IFS= read -r file; do
+            lines=$(wc -l < "$file")
+            if [ "$lines" -gt "${{ inputs.file-size-limit }}" ]; then
+              echo "[FAIL] $file: $lines lines"
+              errors=$((errors + 1))
+            fi
+          done < <(find src -name "*.js" -type f 2>/dev/null)
+
+          if [ "$errors" -gt 0 ]; then
+            echo ""
+            echo "Found $errors files exceeding ${{ inputs.file-size-limit }} line limit"
+            exit 1
+          else
+            echo "All files within size limits"
+          fi
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run test:unit
+        env:
+          NODE_ENV: test
+
+  coverage:
+    name: Coverage Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: unit-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run tests with coverage
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+
+      - name: Validate coverage thresholds
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Validating coverage thresholds..."
+
+          if [ -f "coverage/coverage-summary.json" ]; then
+            lines=$(cat coverage/coverage-summary.json | grep -o '"lines":{"total":[0-9]*,"covered":[0-9]*,"skipped":[0-9]*,"pct":[0-9.]*' | grep -o 'pct":[0-9.]*' | cut -d: -f2)
+            functions=$(cat coverage/coverage-summary.json | grep -o '"functions":{"total":[0-9]*,"covered":[0-9]*,"skipped":[0-9]*,"pct":[0-9.]*' | grep -o 'pct":[0-9.]*' | cut -d: -f2)
+            branches=$(cat coverage/coverage-summary.json | grep -o '"branches":{"total":[0-9]*,"covered":[0-9]*,"skipped":[0-9]*,"pct":[0-9.]*' | grep -o 'pct":[0-9.]*' | cut -d: -f2)
+
+            echo "Lines: ${lines}% (min: ${{ inputs.coverage-threshold-lines }}%)"
+            echo "Functions: ${functions}% (min: ${{ inputs.coverage-threshold-functions }}%)"
+            echo "Branches: ${branches}% (min: ${{ inputs.coverage-threshold-branches }}%)"
+
+            failed=0
+
+            if [ "$(echo "$lines < ${{ inputs.coverage-threshold-lines }}" | bc -l)" -eq 1 ]; then
+              echo "[FAIL] Line coverage below threshold"
+              failed=1
+            fi
+
+            if [ "$(echo "$functions < ${{ inputs.coverage-threshold-functions }}" | bc -l)" -eq 1 ]; then
+              echo "[FAIL] Function coverage below threshold"
+              failed=1
+            fi
+
+            if [ "$(echo "$branches < ${{ inputs.coverage-threshold-branches }}" | bc -l)" -eq 1 ]; then
+              echo "[FAIL] Branch coverage below threshold"
+              failed=1
+            fi
+
+            if [ $failed -eq 1 ]; then
+              exit 1
+            fi
+
+            echo "All coverage thresholds met!"
+          else
+            echo "[WARN] Coverage summary not found"
+          fi
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: ${{ inputs.working-directory }}/coverage/
+          retention-days: 30
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run npm audit
+        working-directory: ${{ inputs.working-directory }}
+        run: npm audit --audit-level=high || echo "Security issues found - review required"
+
+      - name: Check for hardcoded secrets
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Scanning for potential secrets..."
+
+          # Patterns to check (exclude test files and env examples)
+          if grep -rn "CLOUDFLARE_API_TOKEN=" src/ --include="*.js" 2>/dev/null | grep -v "process.env"; then
+            echo "[WARN] Potential hardcoded Cloudflare token"
+          fi
+
+          if grep -rn "password\s*[=:]\s*['\"]" src/ --include="*.js" 2>/dev/null | grep -v "process.env" | grep -v "\.test\."; then
+            echo "[WARN] Potential hardcoded password"
+          fi
+
+          echo "Secret scan completed"

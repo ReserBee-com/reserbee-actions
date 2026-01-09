@@ -1,0 +1,207 @@
+name: Next.js CI Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '20'
+      bundle-size-limit:
+        description: 'Maximum total JS bundle size in KB'
+        required: false
+        type: number
+        default: 500
+      image-size-limit:
+        description: 'Maximum image size in KB'
+        required: false
+        type: number
+        default: 200
+      skip-typecheck:
+        description: 'Skip TypeScript type checking'
+        required: false
+        type: boolean
+        default: false
+      working-directory:
+        description: 'Working directory for the project'
+        required: false
+        type: string
+        default: '.'
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & TypeCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run lint
+
+      - name: Run TypeScript type check
+        if: ${{ !inputs.skip-typecheck }}
+        working-directory: ${{ inputs.working-directory }}
+        run: npx tsc --noEmit
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint-and-typecheck
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Build application
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            ${{ inputs.working-directory }}/.next
+            ${{ inputs.working-directory }}/.vercel
+          retention-days: 1
+
+  bundle-size:
+    name: Bundle Size Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: ${{ inputs.working-directory }}
+
+      - name: Check bundle size
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Checking bundle sizes..."
+
+          total_size=0
+
+          # Check .next/static for standard Next.js builds
+          if [ -d ".next/static" ]; then
+            while IFS= read -r file; do
+              size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+              size_kb=$((size / 1024))
+              if [ "$size_kb" -gt 50 ]; then
+                echo "  $(basename "$file"): ${size_kb}KB"
+              fi
+              total_size=$((total_size + size_kb))
+            done < <(find .next/static -name "*.js" -type f 2>/dev/null)
+          fi
+
+          # Check .vercel/output for Cloudflare builds
+          if [ -d ".vercel/output/static" ]; then
+            while IFS= read -r file; do
+              size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+              size_kb=$((size / 1024))
+              if [ "$size_kb" -gt 50 ]; then
+                echo "  $(basename "$file"): ${size_kb}KB"
+              fi
+              total_size=$((total_size + size_kb))
+            done < <(find .vercel/output/static -name "*.js" -type f 2>/dev/null)
+          fi
+
+          echo ""
+          echo "Total JS bundle size: ${total_size}KB"
+          echo "Limit: ${{ inputs.bundle-size-limit }}KB"
+
+          if [ "$total_size" -gt "${{ inputs.bundle-size-limit }}" ]; then
+            echo "Bundle size exceeds limit!"
+            exit 1
+          else
+            echo "Bundle size within limits"
+          fi
+
+  image-optimization:
+    name: Image Optimization Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check image sizes
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "Checking image sizes..."
+
+          limit_bytes=$(( ${{ inputs.image-size-limit }} * 1024 ))
+          errors=0
+
+          while IFS= read -r file; do
+            size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+            size_kb=$((size / 1024))
+
+            if [ "$size" -gt "$limit_bytes" ]; then
+              echo "[FAIL] $file: ${size_kb}KB (exceeds ${{ inputs.image-size-limit }}KB limit)"
+              errors=$((errors + 1))
+            fi
+          done < <(find . -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" -o -name "*.webp" \) ! -path "./node_modules/*" ! -path "./.next/*" ! -path "./.vercel/*")
+
+          if [ "$errors" -gt 0 ]; then
+            echo ""
+            echo "Found $errors images exceeding size limit"
+            echo "Consider using next/image for automatic optimization"
+            exit 1
+          else
+            echo "All images within size limits"
+          fi
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run security audit
+        working-directory: ${{ inputs.working-directory }}
+        run: npm audit --audit-level=high || echo "Security vulnerabilities found - review required"
