@@ -82,36 +82,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: npm run build
 
-      - name: Verify build succeeded
-        working-directory: ${{ inputs.working-directory }}
-        run: |
-          if [ ! -d ".next" ]; then
-            echo "❌ FATAL: Build failed - .next directory not created"
-            echo "Contents of current directory:"
-            ls -la
-            exit 1
-          fi
-          echo "✓ Build succeeded - .next directory exists"
-
-      - name: Debug build output
-        run: |
-          echo "Current directory: $(pwd)"
-          echo "Working directory input: ${{ inputs.working-directory }}"
-          echo ""
-          echo "Contents of working directory:"
-          ls -la "${{ inputs.working-directory }}" || echo "Directory not found"
-          echo ""
-          echo "Checking for .next directory:"
-          if [ -d "${{ inputs.working-directory }}/.next" ]; then
-            echo "✓ .next directory exists"
-            ls -la "${{ inputs.working-directory }}/.next" | head -20
-          else
-            echo "✗ .next directory NOT found"
-            find "${{ inputs.working-directory }}" -name ".next" -o -name "next" 2>/dev/null
-          fi
-
       - name: Upload build artifacts
-        if: hashFiles(format('{0}/.next', inputs.working-directory)) != ''
         uses: actions/upload-artifact@v4
         with:
           name: build-output
@@ -128,22 +99,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download build artifacts
-        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: build-output
           path: ${{ inputs.working-directory }}
-
-      - name: Debug artifact download
-        run: |
-          echo "Checking for .next after download:"
-          if [ -d "${{ inputs.working-directory }}/.next" ]; then
-            echo "✓ .next found"
-          else
-            echo "✗ .next NOT found"
-            echo "Contents of ${{ inputs.working-directory }}:"
-            ls -la "${{ inputs.working-directory }}" || echo "Directory doesn't exist"
-          fi
 
       - name: Check bundle size
         working-directory: ${{ inputs.working-directory }}
