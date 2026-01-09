@@ -188,7 +188,6 @@ jobs:
 
             limit_bytes=$(( ${{ inputs.image-size-limit }} * 1024 ))
             errors=0
-            oversized_files=""
 
             while IFS= read -r file; do
               size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
@@ -196,8 +195,6 @@ jobs:
 
               if [ "$size" -gt "$limit_bytes" ]; then
                 echo "[FAIL] $file: ${size_kb}KB (exceeds ${{ inputs.image-size-limit }}KB limit)"
-                oversized_files="$oversized_files
-  • $file (${size_kb}KB)"
                 errors=$((errors + 1))
               fi
             done < <(find . -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" -o -name "*.webp" \) ! -path "./node_modules/*" ! -path "./.next/*" ! -path "./.vercel/*")
