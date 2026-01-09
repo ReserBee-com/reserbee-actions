@@ -82,46 +82,8 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: npm run build
 
-      - name: Verify and list build artifacts
-        run: |
-          echo "Working directory input: '${{ inputs.working-directory }}'"
-          cd "${{ inputs.working-directory }}"
-          echo "Current directory after cd: $(pwd)"
-          echo ""
-          if [ -d ".next" ]; then
-            echo "✓ .next directory found"
-            du -sh ".next"
-            echo ""
-            echo "Contents of .next:"
-            find .next -type f | head -20
-          else
-            echo "✗ .next NOT FOUND"
-            exit 1
-          fi
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-output
-          path: ${{ inputs.working-directory }}/.next
-          retention-days: 1
-
-  bundle-size:
-    name: Bundle Size Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: build
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-output
-          path: ${{ inputs.working-directory }}
-
       - name: Check bundle size
+        if: always()
         working-directory: ${{ inputs.working-directory }}
         run: |
           echo "Checking bundle sizes..."
