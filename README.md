@@ -13,8 +13,11 @@ For Next.js/React frontend projects with TypeScript.
 - TypeScript type checking
 - Build verification
 - Bundle size analysis
-- Image size optimization
+- Image size optimization with auto-compression
 - Security audit
+
+**Image Optimization:**
+Uses a hybrid approach with local pre-commit hooks and CI/CD auto-compression. See [Image Optimization Guide](./docs/IMAGE_OPTIMIZATION.md) for details.
 
 **Usage:**
 ```yaml
@@ -185,9 +188,47 @@ Required in `package.json`:
 
 ---
 
+## Image Optimization Setup
+
+Each project using the Next.js CI workflow gets automatic image compression.
+
+### First Time Setup
+
+For projects that haven't set up image optimization yet:
+
+```bash
+# 1. Copy scripts to your project
+cp -r ~/.../reserbee-actions/scripts ./
+
+# 2. Install dependencies
+npm install sharp --save-dev
+
+# 3. Setup pre-commit hook
+bash scripts/setup-hooks.sh
+
+# 4. Test it works
+npm run compress:images
+```
+
+### For Existing Projects
+
+The setup script adds a pre-commit hook that runs automatically.
+
+```bash
+# No additional setup needed - hook runs on every commit
+git add your-changes
+git commit -m "Your message"
+# Hook automatically checks and compresses images
+```
+
+See [Image Optimization Guide](./docs/IMAGE_OPTIMIZATION.md) for detailed documentation.
+
+---
+
 ## Contributing
 
 When updating workflows:
 1. Test changes in a feature branch first
 2. Update version tag after merging to main
 3. Update this README with any new inputs/features
+4. If modifying image compression, update `docs/IMAGE_OPTIMIZATION.md`

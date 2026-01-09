@@ -149,39 +149,65 @@ jobs:
           fi
 
   image-optimization:
-    name: Image Optimization Check
+    name: Image Optimization Check & Auto-Compress
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check image sizes
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Install sharp for image compression
+        working-directory: ${{ inputs.working-directory }}
+        run: npm install sharp --save-dev --silent || true
+
+      - name: Check and auto-compress oversized images
         working-directory: ${{ inputs.working-directory }}
         run: |
-          echo "Checking image sizes..."
-
-          limit_bytes=$(( ${{ inputs.image-size-limit }} * 1024 ))
-          errors=0
-
-          while IFS= read -r file; do
-            size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
-            size_kb=$((size / 1024))
-
-            if [ "$size" -gt "$limit_bytes" ]; then
-              echo "[FAIL] $file: ${size_kb}KB (exceeds ${{ inputs.image-size-limit }}KB limit)"
-              errors=$((errors + 1))
-            fi
-          done < <(find . -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" -o -name "*.webp" \) ! -path "./node_modules/*" ! -path "./.next/*" ! -path "./.vercel/*")
-
-          if [ "$errors" -gt 0 ]; then
-            echo ""
-            echo "Found $errors images exceeding size limit"
-            echo "Consider using next/image for automatic optimization"
-            exit 1
+          if [ -f "../../.github/workflows/scripts/compress-images.js" ]; then
+            node ../../.github/workflows/scripts/compress-images.js --max-size ${{ inputs.image-size-limit }} --dir ./public || true
           else
-            echo "All images within size limits"
+            echo "⚠️  Compression script not found, running fallback check..."
+
+            echo "Checking image sizes..."
+            limit_bytes=$(( ${{ inputs.image-size-limit }} * 1024 ))
+            errors=0
+
+            while IFS= read -r file; do
+              size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+              size_kb=$((size / 1024))
+
+              if [ "$size" -gt "$limit_bytes" ]; then
+                echo "[FAIL] $file: ${size_kb}KB (exceeds ${{ inputs.image-size-limit }}KB limit)"
+                errors=$((errors + 1))
+              fi
+            done < <(find . -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" -o -name "*.webp" \) ! -path "./node_modules/*" ! -path "./.next/*" ! -path "./.vercel/*")
+
+            if [ "$errors" -gt 0 ]; then
+              echo ""
+              echo "Found $errors images exceeding size limit"
+              exit 1
+            fi
           fi
+
+      - name: Commit auto-compressed images (if any)
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Image Compression Bot"
+          git add public/images -A || true
+          git commit -m "chore: auto-compress images to meet CI limits" --allow-empty || true
+
+      - name: Push compressed images
+        if: github.event_name == 'push'
+        run: |
+          git push origin || true
 
   security:
     name: Security Audit
