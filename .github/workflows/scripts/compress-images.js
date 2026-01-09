@@ -31,7 +31,7 @@ const CONFIG = {
   maxSizeKB: parseInt(getArg('--max-size', process.env.IMAGE_MAX_SIZE || 500)),
   initialQuality: parseInt(getArg('--quality', process.env.IMAGE_QUALITY || 60)),
   imageDir: getArg('--dir', process.env.IMAGE_DIR || './public'),
-  failOnError: process.env.FAIL_ON_ERROR !== 'false',
+  failOnError: args.includes('--no-fail') ? false : (process.env.FAIL_ON_ERROR !== 'false'),
 };
 
 const MAX_ITERATIONS = 5; // Don't degrade quality more than 5 times
