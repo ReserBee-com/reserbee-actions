@@ -84,21 +84,23 @@ jobs:
 
       - name: List build output
         run: |
-          echo "Files in ${{ inputs.working-directory }}:"
-          ls -la "${{ inputs.working-directory }}" | head -30
-          if [ -d "${{ inputs.working-directory }}/.next" ]; then
+          echo "Working directory input: '${{ inputs.working-directory }}'"
+          echo ""
+          echo "Files in current directory:"
+          ls -la | head -30
+          echo ""
+          if [ -d ".next" ]; then
             echo ".next directory size:"
-            du -sh "${{ inputs.working-directory }}/.next"
+            du -sh ".next"
           else
-            echo ".next NOT FOUND in ${{ inputs.working-directory }}"
+            echo ".next NOT FOUND"
           fi
 
       - name: Upload build artifacts
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-output
-          path: ${{ inputs.working-directory }}/.next
+          path: ${{ format('{0}/.next', inputs.working-directory) }}
           retention-days: 1
 
   bundle-size:
