@@ -82,21 +82,25 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: npm run build
 
-      - name: List build output
+      - name: Verify and list build artifacts
         run: |
           echo "Working directory input: '${{ inputs.working-directory }}'"
-          echo ""
-          echo "Files in current directory:"
-          ls -la | head -30
+          cd "${{ inputs.working-directory }}"
+          echo "Current directory after cd: $(pwd)"
           echo ""
           if [ -d ".next" ]; then
-            echo ".next directory size:"
+            echo "✓ .next directory found"
             du -sh ".next"
+            echo ""
+            echo "Contents of .next:"
+            find .next -type f | head -20
           else
-            echo ".next NOT FOUND"
+            echo "✗ .next NOT FOUND"
+            exit 1
           fi
 
       - name: Upload build artifacts
+        working-directory: ${{ inputs.working-directory }}
         uses: actions/upload-artifact@v4
         with:
           name: build-output
