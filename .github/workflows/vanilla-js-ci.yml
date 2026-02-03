@@ -138,7 +138,10 @@ jobs:
             exit 1
           else
             echo "All images within size limits"
-            [ "$warnings" -gt 0 ] && echo "$warnings images could be optimized further"
+            if [ "$warnings" -gt 0 ]; then
+              echo "$warnings images could be optimized further"
+            fi
+            exit 0
           fi
 
   html-validation:
