@@ -48,11 +48,15 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Install dependencies
         working-directory: ${{ inputs.working-directory }}
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Run ESLint
         working-directory: ${{ inputs.working-directory }}
@@ -102,11 +106,15 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Install dependencies
         working-directory: ${{ inputs.working-directory }}
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Run unit tests
         working-directory: ${{ inputs.working-directory }}
@@ -128,11 +136,15 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Install dependencies
         working-directory: ${{ inputs.working-directory }}
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Run tests with coverage
         working-directory: ${{ inputs.working-directory }}
@@ -201,11 +213,15 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Install dependencies
         working-directory: ${{ inputs.working-directory }}
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Run npm audit
         working-directory: ${{ inputs.working-directory }}

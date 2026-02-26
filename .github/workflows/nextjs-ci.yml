@@ -43,11 +43,32 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         working-directory: ${{ inputs.working-directory }}
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Ensure ESLint config exists
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f ".eslintrc.cjs" ] && [ ! -f ".eslintrc.yaml" ] && [ ! -f ".eslintrc.yml" ] && [ ! -f "eslint.config.js" ] && [ ! -f "eslint.config.cjs" ] && [ ! -f "eslint.config.mjs" ]; then
+            echo "No ESLint config found. Creating temporary Next.js config for CI..."
+            cat > .eslintrc.json <<'EOF'
+{
+  "extends": ["next/core-web-vitals", "next/typescript"]
+}
+EOF
+          fi
 
       - name: Run ESLint
         working-directory: ${{ inputs.working-directory }}
@@ -72,11 +93,20 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
         working-directory: ${{ inputs.working-directory }}
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Build application
         working-directory: ${{ inputs.working-directory }}
@@ -138,7 +168,6 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Install sharp for image compression
         working-directory: ${{ inputs.working-directory }}
@@ -213,11 +242,15 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
-          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
       - name: Install dependencies
         working-directory: ${{ inputs.working-directory }}
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Run security audit
         working-directory: ${{ inputs.working-directory }}
