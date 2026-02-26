@@ -63,11 +63,7 @@ jobs:
         run: |
           if [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f ".eslintrc.cjs" ] && [ ! -f ".eslintrc.yaml" ] && [ ! -f ".eslintrc.yml" ] && [ ! -f "eslint.config.js" ] && [ ! -f "eslint.config.cjs" ] && [ ! -f "eslint.config.mjs" ]; then
             echo "No ESLint config found. Creating temporary Next.js config for CI..."
-            cat > .eslintrc.json <<'EOF'
-{
-  "extends": ["next/core-web-vitals", "next/typescript"]
-}
-EOF
+            printf '%s\n' '{' '  "extends": ["next/core-web-vitals", "next/typescript"]' '}' > .eslintrc.json
           fi
 
       - name: Run ESLint
