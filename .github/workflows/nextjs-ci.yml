@@ -61,9 +61,14 @@ jobs:
       - name: Ensure ESLint config exists
         working-directory: ${{ inputs.working-directory }}
         run: |
+          if ! npm ls eslint --depth=0 >/dev/null 2>&1; then
+            echo "ESLint not found in project deps. Installing CI-local eslint packages..."
+            npm install --no-save eslint eslint-config-next
+          fi
+
           if [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f ".eslintrc.cjs" ] && [ ! -f ".eslintrc.yaml" ] && [ ! -f ".eslintrc.yml" ] && [ ! -f "eslint.config.js" ] && [ ! -f "eslint.config.cjs" ] && [ ! -f "eslint.config.mjs" ]; then
             echo "No ESLint config found. Creating temporary Next.js config for CI..."
-            printf '%s\n' '{' '  "extends": ["next/core-web-vitals", "next/typescript"]' '}' > .eslintrc.json
+            printf '%s\n' '{' '  "extends": ["next/core-web-vitals"]' '}' > .eslintrc.json
           fi
 
       - name: Run ESLint
