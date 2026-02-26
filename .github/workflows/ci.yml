@@ -1,0 +1,23 @@
+name: Reusable Workflows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate Repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify reusable workflow files exist
+        run: |
+          test -f .github/workflows/nextjs-ci.yml
+          test -f .github/workflows/vanilla-js-ci.yml
+          test -f .github/workflows/backend-ci.yml
+          echo "Reusable workflow files are present."
